@@ -3,7 +3,6 @@ import { expect } from 'chai';
 import { Request, Application } from '../src';
 import { RequestEvent } from '../src/request-response-types';
 import {
-   apiGatewayRequest,
    handlerContext,
    albRequest,
    albMultiValHeadersRequest,
@@ -15,15 +14,16 @@ import { isKeyValueStringObject, Optional } from '@silvermine/toolbox';
 import ConsoleLogger from '../src/logging/ConsoleLogger';
 import sinon from 'sinon';
 import { DebugLogObject } from '../src/logging/logging-types';
+import { makeFakeAPIGatewayEvent } from './fakes/api-gateway-event';
 
 describe('Request', () => {
    let app: Application, allRequestTypes: Request[], allEventTypes: RequestEvent[], rawQueries: string[];
 
    beforeEach(() => {
       app = new Application();
-      allEventTypes = [ apiGatewayRequest(), albRequest(), albMultiValHeadersRequest() ];
+      allEventTypes = [ makeFakeAPIGatewayEvent(), albRequest(), albMultiValHeadersRequest() ];
       allRequestTypes = [
-         new Request(app, apiGatewayRequest(), handlerContext()),
+         new Request(app, makeFakeAPIGatewayEvent(), handlerContext()),
          new Request(app, albRequest(), handlerContext()),
          new Request(app, albMultiValHeadersRequest(), handlerContext()),
       ];
@@ -113,7 +113,7 @@ describe('Request', () => {
    describe('header functionality', () => {
 
       it('works with multi-value headers provided in the event (and is case-insensitive)', () => {
-         let apigw = new Request(app, apiGatewayRequest(), handlerContext()),
+         let apigw = new Request(app, makeFakeAPIGatewayEvent(), handlerContext()),
              albmv = new Request(app, albMultiValHeadersRequest(), handlerContext());
 
          _.each([ apigw, albmv ], (req) => {
@@ -250,7 +250,7 @@ describe('Request', () => {
 
       it('parses proper values - APIGW', () => {
          _.each(testCases, (testCase) => {
-            let evt: RequestEvent = apiGatewayRequest(),
+            let evt: RequestEvent = makeFakeAPIGatewayEvent(),
                 req;
 
             evt.headers.Host = testCase.host;
@@ -311,7 +311,7 @@ describe('Request', () => {
    describe('ip property', () => {
 
       it('parses correctly', () => {
-         let req = new Request(app, apiGatewayRequest(), handlerContext()),
+         let req = new Request(app, makeFakeAPIGatewayEvent(), handlerContext()),
              evt: RequestEvent;
 
          expect(req.ip).to.eql('12.12.12.12');
@@ -319,11 +319,11 @@ describe('Request', () => {
          // API Gateway requests always use the one from the request context, so it
          // shouldn't matter what the 'trust proxy' setting is set to.
          app.enable('trust proxy');
-         req = new Request(app, apiGatewayRequest(), handlerContext());
+         req = new Request(app, makeFakeAPIGatewayEvent(), handlerContext());
          expect(req.ip).to.eql('12.12.12.12');
 
          app.disable('trust proxy');
-         req = new Request(app, apiGatewayRequest(), handlerContext());
+         req = new Request(app, makeFakeAPIGatewayEvent(), handlerContext());
          expect(req.ip).to.eql('12.12.12.12');
 
          // ALB requests don't have the IP in the request context, so it's dependent on
@@ -360,7 +360,7 @@ describe('Request', () => {
       it('properly detects event source', () => {
          let alb = new Request(app, albRequest(), handlerContext()),
              albmv = new Request(app, albMultiValHeadersRequest(), handlerContext()),
-             apigw = new Request(app, apiGatewayRequest(), handlerContext());
+             apigw = new Request(app, makeFakeAPIGatewayEvent(), handlerContext());
 
          expect(alb.eventSourceType).to.eql(Request.SOURCE_ALB);
          expect(alb.isALB()).to.eql(true);
@@ -382,7 +382,7 @@ describe('Request', () => {
          let evt, req;
 
          // APIGW should always be HTTPS, and not care about headers
-         req = new Request(app, apiGatewayRequest(), handlerContext());
+         req = new Request(app, makeFakeAPIGatewayEvent(), handlerContext());
          app.disable('trust proxy');
          expect(req.protocol).to.eql('https');
          expect(req.secure).to.eql(true);
@@ -390,7 +390,7 @@ describe('Request', () => {
          expect(req.protocol).to.eql('https');
          expect(req.secure).to.eql(true);
 
-         evt = apiGatewayRequest();
+         evt = makeFakeAPIGatewayEvent();
          evt.headers['X-Forwarded-Proto'] = 'http';
          evt.multiValueHeaders['X-Forwarded-Proto'] = [ 'http' ];
          app.disable('trust proxy');
@@ -479,7 +479,7 @@ describe('Request', () => {
       });
 
       it('parses arrays of values correctly - when multi-value is supported', () => {
-         _.each([ apiGatewayRequest(), albMultiValHeadersRequest() ], (evt) => {
+         _.each([ makeFakeAPIGatewayEvent(), albMultiValHeadersRequest() ], (evt) => {
             const req = new Request(app, evt, handlerContext());
 
             expect(req.query.x).to.eql([ '1', '2' ]);
@@ -503,7 +503,7 @@ describe('Request', () => {
             }
          };
 
-         test(apiGatewayRequest(), [ 'bar b', 'baz c' ]);
+         test(makeFakeAPIGatewayEvent(), [ 'bar b', 'baz c' ]);
          test(albRequest(), 'baz c');
          test(albMultiValHeadersRequest(), [ 'bar b', 'baz c' ]);
       });
@@ -537,7 +537,7 @@ describe('Request', () => {
       });
 
       it('does not throw an error when bad values supplied', () => {
-         const apigwReq = apiGatewayRequest();
+         const apigwReq = makeFakeAPIGatewayEvent();
 
          // Simulate a bad value (from an injection attack) being supplied
          apigwReq.queryStringParameters = {
@@ -558,7 +558,7 @@ describe('Request', () => {
       });
 
       it('only contains the expected data', () => {
-         let req = new Request(app, apiGatewayRequest(), handlerContext());
+         let req = new Request(app, makeFakeAPIGatewayEvent(), handlerContext());
 
          expect(req.query).to.eql({
             foo: { a: [ 'bar b', 'baz c' ] },
@@ -589,7 +589,7 @@ describe('Request', () => {
 
       it('sets body to null for empty values', () => {
          _.each([ null, undefined, '' ], (body) => {
-            let req = new Request(app, _.extend(apiGatewayRequest(), { body }), handlerContext());
+            let req = new Request(app, _.extend(makeFakeAPIGatewayEvent(), { body }), handlerContext());
 
             expect(req.body).to.strictlyEqual(null);
          });
@@ -604,7 +604,7 @@ describe('Request', () => {
 
          _.each(bodies, (o) => {
             let ext = { body: JSON.stringify(o), multiValueHeaders: { 'Content-Type': [ 'application/json; charset=utf-8' ] } },
-                req = new Request(app, _.extend(apiGatewayRequest(), ext), handlerContext());
+                req = new Request(app, _.extend(makeFakeAPIGatewayEvent(), ext), handlerContext());
 
             expect(req.body).to.eql(o);
          });
@@ -615,7 +615,7 @@ describe('Request', () => {
 
          _.each(bodies, (body) => {
             let ext = { body, multiValueHeaders: { 'Content-Type': [ 'application/json; charset=utf-8' ] } },
-                req = new Request(app, _.extend(apiGatewayRequest(), ext), handlerContext());
+                req = new Request(app, _.extend(makeFakeAPIGatewayEvent(), ext), handlerContext());
 
             expect(req.body).to.strictlyEqual(null);
          });
@@ -627,7 +627,7 @@ describe('Request', () => {
 
          _.each(bodies, (body) => {
             let ext = { body, multiValueHeaders: { 'Content-Type': [ 'foo/bar; charset=utf-8' ] } },
-                req = new Request(app, _.extend(apiGatewayRequest(), ext), handlerContext());
+                req = new Request(app, _.extend(makeFakeAPIGatewayEvent(), ext), handlerContext());
 
             expect(req.body).to.strictlyEqual(body);
          });
@@ -638,7 +638,7 @@ describe('Request', () => {
    describe('`url` property', () => {
 
       it('should be able to be updated', () => {
-         let req = new Request(app, apiGatewayRequest(), handlerContext()),
+         let req = new Request(app, makeFakeAPIGatewayEvent(), handlerContext()),
              newURL = '/test';
 
          // Assert that we have a valid test
@@ -649,7 +649,7 @@ describe('Request', () => {
       });
 
       it('should accept blank values', () => {
-         let req = new Request(app, apiGatewayRequest(), handlerContext()),
+         let req = new Request(app, makeFakeAPIGatewayEvent(), handlerContext()),
              newURL = '';
 
          // Assert that we have a valid test
@@ -660,7 +660,7 @@ describe('Request', () => {
       });
 
       it('should update `path` when `url` changes', () => {
-         let req = new Request(app, apiGatewayRequest(), handlerContext()),
+         let req = new Request(app, makeFakeAPIGatewayEvent(), handlerContext()),
              newURL = '/test';
 
          // Assert that we have a valid test
@@ -671,7 +671,7 @@ describe('Request', () => {
       });
 
       it('should update the parent request\'s `url` and related properties when a sub-request\'s `url` is updated', () => {
-         let event = apiGatewayRequest(),
+         let event = makeFakeAPIGatewayEvent(),
              req, subReq, subSubReq;
 
          // Assert that we have a valid test
@@ -724,13 +724,13 @@ describe('Request', () => {
       }
 
       it('exists and logs messages', () => {
-         let req = new Request(app, apiGatewayRequest(), handlerContext());
+         let req = new Request(app, makeFakeAPIGatewayEvent(), handlerContext());
 
          testLog(req);
       });
 
       it('is inherited from parent requests to sub-requests', () => {
-         let req = new Request(app, apiGatewayRequest(), handlerContext()),
+         let req = new Request(app, makeFakeAPIGatewayEvent(), handlerContext()),
              subReq = req.makeSubRequest('');
 
          testLog(subReq);
