@@ -4,7 +4,26 @@ import {
    ApplicationLoadBalancerEventRequestContext,
    APIGatewayRequestEvent,
    ApplicationLoadBalancerRequestEvent } from '../src/request-response-types';
-import { Context } from 'aws-lambda';
+import { APIGatewayEventIdentity, Context } from 'aws-lambda';
+import withDefault from './test-utils/withDefault';
+
+interface MakeAPIGatewayRequestEventContextParams {
+   httpMethod?: string | null;
+}
+interface MakeAPIGatewayRequestEventHeadersParams {
+    [name: string]: string | undefined;
+}
+
+interface MakeAPIGatewayRequestEventMultiValueHeadersParams {
+    [name: string]: string[] | undefined;
+}
+
+interface MakeAPIGatewayRequestEventParams {
+   httpMethod?: string;
+   path?: string;
+   headers?: MakeAPIGatewayRequestEventHeadersParams;
+   multiValueHeaders?: MakeAPIGatewayRequestEventMultiValueHeadersParams;
+}
 
 export const handlerContext = (fillAllFields: boolean = false): Context => {
    let ctx: Context;
@@ -214,4 +233,119 @@ export const albMultiValHeadersRequest = (): ApplicationLoadBalancerRequestEvent
          cookie: [ 'uid=abc; ga=1234; foo=bar; baz=foo%5Ba%5D; obj=j%3A%7B%22abc%22%3A123%7D; onechar=j; bad=j%3A%7Ba%7D' ],
       },
    });
+};
+
+export const makeAPIGatewayRequestContextIdentity = (): APIGatewayEventIdentity => {
+   return {
+      accessKey: null,
+      accountId: null,
+      apiKey: null,
+      apiKeyId: null,
+      caller: null,
+      clientCert: null,
+      cognitoAuthenticationProvider: null,
+      cognitoAuthenticationType: null,
+      cognitoIdentityId: null,
+      cognitoIdentityPoolId: null,
+      principalOrgId: null,
+      sourceIp: '12.12.12.12',
+      user: null,
+      userAgent: 'curl/7.54.0',
+      userArn: null,
+   };
+};
+
+export const makeAPIGatewayRequestContext = (params?: MakeAPIGatewayRequestEventContextParams): APIGatewayEventRequestContext => {
+   return {
+      accountId: '123456789012',
+      apiId: 'someapi',
+      authorizer: null,
+      httpMethod: params?.httpMethod ?? 'GET',
+      path: '/prd',
+      protocol: 'HTTP/1.1',
+      stage: 'prd',
+      requestId: 'a507736b-259e-11e9-8fcf-4f1f08c4591e',
+      requestTimeEpoch: 1548969891530,
+      resourceId: 'reas23acc',
+      identity: makeAPIGatewayRequestContextIdentity(),
+      resourcePath: '/',
+   };
+};
+
+export const makeAPIGatewayRequestEventHeaders =
+   (params?: MakeAPIGatewayRequestEventHeadersParams): APIGatewayRequestEvent['headers'] => {
+      return withDefault<APIGatewayRequestEvent['headers']>(
+         params,
+         {
+            Accept: '*/*',
+            'CloudFront-Forwarded-Proto': 'https',
+            'CloudFront-Is-Desktop-Viewer': 'true',
+            'CloudFront-Is-Mobile-Viewer': 'false',
+            'CloudFront-Is-SmartTV-Viewer': 'false',
+            'CloudFront-Is-Tablet-Viewer': 'false',
+            'CloudFront-Viewer-Country': 'US',
+            Host: 'b5gee6dacf.execute-api.us-east-1.amazonaws.com',
+            'User-Agent': 'curl/7.54.0',
+            Via: '2.0 4ee511e558a0400aa4b9c1d34d92af5a.cloudfront.net (CloudFront)',
+            'X-Amz-Cf-Id': 'xn-ohXlUAed-32bae2cfb7164fd690ffffb87d36b032==',
+            'X-Amzn-Trace-Id': 'Root=1-4b5398e2-a7fbe4f92f2e911013cba76b',
+            'X-Forwarded-For': '8.8.8.8, 2.3.4.5',
+            'X-Forwarded-Port': '443',
+            'X-Forwarded-Proto': 'https',
+            Referer: 'https://en.wikipedia.org/wiki/HTTP_referer',
+            Cookie: 'uid=abc; ga=1234; foo=bar; baz=foo%5Ba%5D; obj=j%3A%7B%22abc%22%3A123%7D; onechar=j; bad=j%3A%7Ba%7D',
+         }
+      );
+   };
+
+export const makeAPIGatewayRequestEventMultiValueHeader =
+   (params?: MakeAPIGatewayRequestEventMultiValueHeadersParams): APIGatewayRequestEvent['multiValueHeaders'] => {
+      return withDefault<APIGatewayRequestEvent['multiValueHeaders']>(
+         params,
+         {
+            Foo: [ 'bar', 'baz' ],
+            ...Object.fromEntries(
+               Object.entries(makeAPIGatewayRequestEventHeaders())
+                  .map(([ key, value ]): Array<string | Array<string | undefined>> => {
+                     return [ key, [ value ] ];
+                  })
+            ),
+         }
+      );
+   };
+
+export const makeAPIGatewayRequestEvent = (params?: MakeAPIGatewayRequestEventParams): APIGatewayRequestEvent => {
+   const httpMethod = withDefault(params?.httpMethod, 'GET'),
+         path = withDefault(params?.path, '/echo/asdf/a'),
+         headers = withDefault(params?.headers, makeAPIGatewayRequestEventHeaders());
+
+   const multiValueHeaders = withDefault(
+      params?.multiValueHeaders,
+      makeAPIGatewayRequestEventMultiValueHeader()
+   );
+
+   return {
+      path,
+      httpMethod,
+      body: null,
+      isBase64Encoded: false,
+      resource: '/{proxy+}',
+      pathParameters: { proxy: path },
+      stageVariables: null,
+      requestContext: makeAPIGatewayRequestContext({
+         httpMethod,
+      }),
+      headers,
+      multiValueHeaders,
+      queryStringParameters: {
+         'foo[a]': 'bar b',
+         x: '2',
+         y: 'z',
+      },
+      multiValueQueryStringParameters: {
+         'foo[a]': [ 'bar b', 'baz c' ],
+         x: [ '1', '2' ],
+         y: [ 'z' ],
+      },
+   };
 };
